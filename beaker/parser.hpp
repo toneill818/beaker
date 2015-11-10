@@ -34,6 +34,8 @@ public:
   Expr* expr();
 
   // Type parsers
+  Type const* primary_type();
+  Type const* postfix_type();
   Type const* type();
 
   // Declaration parsers
@@ -41,6 +43,8 @@ public:
   Decl* variable_decl();
   Decl* parameter_decl();
   Decl* function_decl();
+  Decl* record_decl();
+  Decl* field_decl();
 
   // Statement parsers
   Stmt* stmt();
@@ -64,9 +68,16 @@ public:
 
 private:
   // Actions
+  Type const* on_id_type(Token);
+  Type const* on_array_type(Type const*, Expr*);
+  Type const* on_block_type(Type const*);
+  Type const* on_function_type(Type_seq const&, Type const*);
+
   Expr* on_id(Token);
   Expr* on_bool(Token);
   Expr* on_int(Token);
+  Expr* on_char(Token);
+  Expr* on_str(Token);
   Expr* on_add(Expr*, Expr*);
   Expr* on_sub(Expr*, Expr*);
   Expr* on_mul(Expr*, Expr*);
@@ -84,10 +95,15 @@ private:
   Expr* on_or(Expr*, Expr*);
   Expr* on_not(Expr*);
   Expr* on_call(Expr*, Expr_seq const&);
+  Expr* on_index(Expr*, Expr*);
+  Expr* on_dot(Expr*, Expr*);
 
-  Decl* on_variable_decl(Token, Type const*, Expr*);
+  Decl* on_variable(Token, Type const*);
+  Decl* on_variable(Token, Type const*, Expr*);
   Decl* on_parameter_decl(Token, Type const*);
   Decl* on_function_decl(Token, Decl_seq const&, Type const*, Stmt*);
+  Decl* on_record(Token, Decl_seq const&);
+  Decl* on_field(Token, Type const*);
   Decl* on_module_decl(Decl_seq const&);
 
   // FIXME: Remove _stmt from handlers.
@@ -157,7 +173,7 @@ Parser::lookahead() const
 //
 // TODO: Put this in the .cpp file? It is private.
 template<typename T, typename... Args>
-inline T* 
+inline T*
 Parser::init(Location loc, Args&&... args)
 {
   T* t = new T(std::forward<Args>(args)...);

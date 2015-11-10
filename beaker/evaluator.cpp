@@ -36,22 +36,22 @@ Evaluator::eval(Expr const* e)
     Value operator()(Or_expr const* e) { return ev.eval(e); }
     Value operator()(Not_expr const* e) { return ev.eval(e); }
     Value operator()(Call_expr const* e) { return ev.eval(e); }
+    Value operator()(Member_expr const* e) { return ev.eval(e); }
+    Value operator()(Index_expr const* e) { return ev.eval(e); }
     Value operator()(Value_conv const* e) { return ev.eval(e); }
+    Value operator()(Block_conv const* e) { return ev.eval(e); }
+    Value operator()(Default_init const* e) { return ev.eval(e); }
+    Value operator()(Copy_init const* e) { return ev.eval(e); }
   };
 
   return apply(e, Fn {*this});
 }
 
 
-Value 
+Value
 Evaluator::eval(Literal_expr const* e)
 {
-  Symbol const* s = e->symbol();
-  if (Boolean_sym const* b = as<Boolean_sym>(s))
-    return b->value();
-  if (Integer_sym const* z = as<Integer_sym>(s))
-    return z->value();
-  throw std::runtime_error("ill-formed literal");
+  return e->value();
 }
 
 
@@ -131,13 +131,13 @@ Evaluator::eval(Pos_expr const* e)
 
 // Compare two integer or function values.
 template<typename F>
-bool 
+bool
 compare_equal(Value const& v1, Value const& v2, F fn)
 {
   // See through references.
   Value const& a = v1.is_reference() ? *v1.get_reference() : v1;
   Value const& b = v2.is_reference() ? *v2.get_reference() : v2;
-  
+
   // Perform comparison.
   if (a.kind() == b.kind()) {
     if (a.is_integer())
@@ -170,7 +170,7 @@ Evaluator::eval(Ne_expr const* e)
 
 // Compare two integer or function values.
 template<typename F>
-bool 
+bool
 compare_less(Value const& v1, Value const& v2, F fn)
 {
   Value const& a = v1.is_reference() ? *v1.get_reference() : v1;
@@ -289,7 +289,21 @@ Evaluator::eval(Call_expr const* e)
 }
 
 
-// Apply an lvalue-to-rvalue conversion by dereferencing
+Value
+Evaluator::eval(Member_expr const* e)
+{
+  throw std::runtime_error("not implemented");
+}
+
+
+Value
+Evaluator::eval(Index_expr const* e)
+{
+  throw std::runtime_error("not implemnted");
+}
+
+
+// Apply an object-to-value conversion by dereferencing
 // the reference value. Note that the source must evaluate
 // to a reference.
 Value
@@ -297,6 +311,30 @@ Evaluator::eval(Value_conv const* e)
 {
   Value v = eval(e->source());
   return *v.get_reference();
+}
+
+
+// Apply an array-to-block conversion by dereferencing
+// the reference value. Note that the source must evaluate
+// to a reference.
+Value
+Evaluator::eval(Block_conv const* e)
+{
+  throw std::runtime_error("not implemented");
+}
+
+
+Value
+Evaluator::eval(Default_init const* e)
+{
+  throw std::runtime_error("not implemented");
+}
+
+
+Value
+Evaluator::eval(Copy_init const* e)
+{
+  throw std::runtime_error("not implemented");
 }
 
 
@@ -313,6 +351,8 @@ Evaluator::eval(Decl const* d)
     void operator()(Variable_decl const* d) { ev.eval(d); }
     void operator()(Function_decl const* d) { ev.eval(d); }
     void operator()(Parameter_decl const* d) { ev.eval(d); }
+    void operator()(Record_decl const* d) { ev.eval(d); }
+    void operator()(Field_decl const* d) { ev.eval(d); }
     void operator()(Module_decl const* d) { ev.eval(d); }
   };
 
@@ -343,6 +383,24 @@ Evaluator::eval(Parameter_decl const*)
   return;
 }
 
+
+// There is no evaluation for a record.
+void
+Evaluator::eval(Record_decl const*)
+{
+  return;
+}
+
+
+// There is no evaluation for a field.
+void
+Evaluator::eval(Field_decl const*)
+{
+  return;
+}
+
+
+// Evaluate the declarations in the module.
 void
 Evaluator::eval(Module_decl const* d)
 {
@@ -397,7 +455,7 @@ Evaluator::eval(Block_stmt const* s, Value& r)
   Store_sentinel store(*this);
   for(Stmt const* s1 : s->statements()) {
 
-    // Evaluate each statement in turn. If the 
+    // Evaluate each statement in turn. If the
     Control ctl = eval(s1, r);
     switch (ctl) {
       case return_ctl:
@@ -444,8 +502,8 @@ Evaluator::eval(If_then_stmt const* s, Value& r)
 
 // If the condition evaluates to true, the true branch
 // is evaluated. Otherwise the false branch is evaluated.
-// Note that control stops if either branch returns, 
-// breaks, or continues. In all other cases, control 
+// Note that control stops if either branch returns,
+// breaks, or continues. In all other cases, control
 // flows to the next statement.
 Control
 Evaluator::eval(If_else_stmt const* s, Value& r)
@@ -467,10 +525,10 @@ Evaluator::eval(While_stmt const* s, Value& r)
     Value c = eval(s->condition());
     if (!c.get_integer())
       break;
-    
-    // Evaluate the body. Stop iterating if we got 
-    // a break, or return if we got a return. 
-    // Otherwise, continue to the next iteration. 
+
+    // Evaluate the body. Stop iterating if we got
+    // a break, or return if we got a return.
+    // Otherwise, continue to the next iteration.
     Control ctl = eval(s->body(), r);
     if (ctl == break_ctl)
       break;
@@ -512,6 +570,30 @@ Evaluator::eval(Declaration_stmt const* s, Value& r)
 
 
 // -------------------------------------------------------------------------- //
+// Expression reduction
+
+// Return a literal corresponding to the evaluation
+// of e. If e invokes undefined behavior or is not
+// otherwise a constant expression, this returns nullptr.
+Expr*
+reduce(Expr const* e)
+{
+  // If the expression is already a literal, then just
+  // return it.
+  if (is<Literal_expr>(e))
+    return const_cast<Expr*>(e);
+
+  // Otherwise, try evaluating.
+  try {
+    Value v = evaluate(e);
+    return new Literal_expr(e->type(), v);
+  } catch (...) {
+    return nullptr;
+  }
+}
+
+
+// -------------------------------------------------------------------------- //
 // Program execution
 
 // Execute the given function.
@@ -535,4 +617,3 @@ Evaluator::exec(Function_decl const* fn)
 
   return result;
 }
-

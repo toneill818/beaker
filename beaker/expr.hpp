@@ -6,6 +6,7 @@
 
 #include "prelude.hpp"
 #include "symbol.hpp"
+#include "value.hpp"
 
 
 // The Expr class represents the set of all expressions
@@ -61,7 +62,12 @@ struct Expr::Visitor
   virtual void visit(Or_expr const*) = 0;
   virtual void visit(Not_expr const*) = 0;
   virtual void visit(Call_expr const*) = 0;
+  virtual void visit(Member_expr const*) = 0;
+  virtual void visit(Index_expr const*) = 0;
   virtual void visit(Value_conv const*) = 0;
+  virtual void visit(Block_conv const*) = 0;
+  virtual void visit(Default_init const*) = 0;
+  virtual void visit(Copy_init const*) = 0;
 };
 
 
@@ -88,7 +94,12 @@ struct Expr::Mutator
   virtual void visit(Or_expr*) = 0;
   virtual void visit(Not_expr*) = 0;
   virtual void visit(Call_expr*) = 0;
+  virtual void visit(Member_expr*) = 0;
+  virtual void visit(Index_expr*) = 0;
   virtual void visit(Value_conv*) = 0;
+  virtual void visit(Block_conv*) = 0;
+  virtual void visit(Default_init*) = 0;
+  virtual void visit(Copy_init*) = 0;
 };
 
 
@@ -100,17 +111,16 @@ struct Expr::Mutator
 // since functions can only ever be named.
 struct Literal_expr : Expr
 {
-  Literal_expr(Symbol const* s)
-    : sym(s)
+  Literal_expr(Type const* t, Value const& v)
+    : Expr(t), val(v)
   { }
 
   void accept(Visitor& v) const { v.visit(this); }
   void accept(Mutator& v)       { v.visit(this); }
 
-  Symbol const* symbol() const   { return sym; }
-  String const& spelling() const { return sym->spelling(); }
+  Value const& value() const   { return val; }
 
-  Symbol const* sym;
+  Value val;
 };
 
 
@@ -127,8 +137,8 @@ struct Id_expr : Expr
   void accept(Visitor& v) const { v.visit(this); }
   void accept(Mutator& v)       { v.visit(this); }
 
-  Symbol const* symbol() const             { return sym; }
-  String const& spelling() const           { return sym->spelling(); }
+  Symbol const* symbol() const   { return sym; }
+  String const& spelling() const { return sym->spelling(); }
 
   Decl const*   declaration() const        { return decl; }
   void          declaration(Decl const* d) { decl = d; }
@@ -326,7 +336,7 @@ struct Not_expr : Unary_expr
 };
 
 
-// The express e(e1, e2, ..., en)
+// The expression e(e1, e2, ..., en)
 struct Call_expr : Expr
 {
   Call_expr(Expr* f, Expr_seq const& a)
@@ -336,9 +346,7 @@ struct Call_expr : Expr
   void accept(Visitor& v) const { v.visit(this); }
   void accept(Mutator& v)       { v.visit(this); }
 
-  Expr const* target() const { return first; }
-  Expr*       target()       { return first; }
-
+  Expr*           target() const    { return first; }
   Expr_seq const& arguments() const { return second; }
   Expr_seq&       arguments()       { return second; }
 
@@ -347,8 +355,52 @@ struct Call_expr : Expr
 };
 
 
+// The expression e1.e2 where e1 has record type.
+//
+// We cache the position of the resolved member
+// within its enclosing scope. This means we don't
+// have to re-compute it during evaluation or
+// codegen later on.
+struct Member_expr : Expr
+{
+  Member_expr(Expr* e1, Expr* e2)
+    : pos_(-1), first(e1), second(e2)
+  { }
+
+  void accept(Visitor& v) const { v.visit(this); }
+  void accept(Mutator& v)       { v.visit(this); }
+
+  int   position() const { return pos_; }
+  Expr* scope() const    { return first; }
+  Expr* member() const   { return second; }
+
+  int   pos_;
+  Expr* first;
+  Expr* second;
+};
+
+
+// Represents the expression e1[e2] where e1
+// has array type.
+struct Index_expr : Expr
+{
+  Index_expr(Expr* e1, Expr* e2)
+    : first(e1), second(e2)
+  { }
+
+  void accept(Visitor& v) const { v.visit(this); }
+  void accept(Mutator& v)       { v.visit(this); }
+
+  Expr* array() const   { return first; }
+  Expr* index() const   { return second; }
+
+  Expr* first;
+  Expr* second;
+};
+
+
 // -------------------------------------------------------------------------- //
-//                              Conversions
+// Conversions
 
 // Represents the conversion of a source expression to
 // a target type.
@@ -375,6 +427,72 @@ struct Value_conv : Conversion
 };
 
 
+// Represents the conversion of an array to a block.
+struct Block_conv : Conversion
+{
+  using Conversion::Conversion;
+
+  void accept(Visitor& v) const { v.visit(this); }
+  void accept(Mutator& v)       { v.visit(this); }
+};
+
+
+// -------------------------------------------------------------------------- //
+// Initializers
+
+// An initializer is a kind of expression that performs
+// a particular form of initialization for a variable.
+//
+// Each initializer refers to the declaration that it
+// initializes. This is used during evaluation and
+// code generation to emplace values directly into the
+// allocated object. The declaration is set during
+// elaboration.
+//
+// FIXME: Should this be a declaraiton or an expression
+// that refers to the created object? Probably the
+// latter so that we can handle dynamic allocation in
+// a uniform way. Think about C++'s `new T() or
+// `new (p) T()`.
+struct Initializer : Expr
+{
+  Initializer(Type const* t)
+    : Expr(t)
+  { }
+
+  Decl const* declaration() const { return decl_; }
+
+  Decl const* decl_;
+};
+
+
+// Performs default initialization of an object
+// of the given type.
+struct Default_init : Initializer
+{
+  using Initializer::Initializer;
+
+  void accept(Visitor& v) const { v.visit(this); }
+  void accept(Mutator& v)       { v.visit(this); }
+};
+
+
+// Performs copy initialization of an object
+// of the given type.
+struct Copy_init : Initializer
+{
+  Copy_init(Type const* t, Expr* e)
+    : Initializer(t), first(e)
+  { }
+
+  Expr* value() const { return first; }
+
+  void accept(Visitor& v) const { v.visit(this); }
+  void accept(Mutator& v)       { v.visit(this); }
+
+  Expr* first;
+};
+
 // -------------------------------------------------------------------------- //
 // Generic visitor
 
@@ -384,7 +502,7 @@ struct Generic_expr_visitor : Expr::Visitor, lingo::Generic_visitor<F, T>
   Generic_expr_visitor(F fn)
     : lingo::Generic_visitor<F, T>(fn)
   { }
-  
+
   void visit(Literal_expr const* e) { this->invoke(e); }
   void visit(Id_expr const* e) { this->invoke(e); }
   void visit(Add_expr const* e) { this->invoke(e); }
@@ -404,7 +522,12 @@ struct Generic_expr_visitor : Expr::Visitor, lingo::Generic_visitor<F, T>
   void visit(Or_expr const* e) { this->invoke(e); }
   void visit(Not_expr const* e) { this->invoke(e); }
   void visit(Call_expr const* e) { this->invoke(e); }
+  void visit(Member_expr const* e) { this->invoke(e); }
+  void visit(Index_expr const* e) { this->invoke(e); }
   void visit(Value_conv const* e) { this->invoke(e); }
+  void visit(Block_conv const* e) { this->invoke(e); }
+  void visit(Default_init const* e) { this->invoke(e); }
+  void visit(Copy_init const* e) { this->invoke(e); }
 };
 
 
@@ -427,7 +550,7 @@ struct Generic_expr_mutator : Expr::Mutator, lingo::Generic_mutator<F, T>
   Generic_expr_mutator(F fn)
     : lingo::Generic_mutator<F, T>(fn)
   { }
-  
+
   void visit(Literal_expr* e) { this->invoke(e); }
   void visit(Id_expr* e) { this->invoke(e); }
   void visit(Add_expr* e) { this->invoke(e); }
@@ -447,7 +570,12 @@ struct Generic_expr_mutator : Expr::Mutator, lingo::Generic_mutator<F, T>
   void visit(Or_expr* e) { this->invoke(e); }
   void visit(Not_expr* e) { this->invoke(e); }
   void visit(Call_expr* e) { this->invoke(e); }
+  void visit(Member_expr* e) { this->invoke(e); }
+  void visit(Index_expr* e) { this->invoke(e); }
   void visit(Value_conv* e) { this->invoke(e); }
+  void visit(Block_conv* e) { this->invoke(e); }
+  void visit(Default_init* e) { this->invoke(e); }
+  void visit(Copy_init* e) { this->invoke(e); }
 };
 
 

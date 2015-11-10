@@ -4,6 +4,7 @@
 #ifndef BEAKER_TOKEN_HPP
 #define BEAKER_TOKEN_HPP
 
+#include "prelude.hpp"
 #include "symbol.hpp"
 #include "location.hpp"
 
@@ -25,9 +26,14 @@ enum Token_kind
   rbrace_tok,
   lparen_tok,
   rparen_tok,
+  lbrack_tok,
+  rbrack_tok,
+  squote_tok,
+  dquote_tok,
   comma_tok,
   colon_tok,
   semicolon_tok,
+  dot_tok,
   equal_tok,
   plus_tok,
   minus_tok,
@@ -48,23 +54,27 @@ enum Token_kind
   // Keywords
   bool_kw,
   break_kw,
+  char_kw,
   continue_kw,
   def_kw,
   else_kw,
   if_kw,
   int_kw,
   return_kw,
+  struct_kw,
   var_kw,
   while_kw,
 
   // Multi-valued tokens
   boolean_tok,      // true | false
   integer_tok,      // digit+
+  character_tok,    // narrow characters
+  string_tok,       // narrow string literals
   identifier_tok,   // letter (letter | digit)*
 };
 
 
-char const* 
+char const*
 spelling(Token_kind k);
 
 
@@ -88,9 +98,15 @@ public:
   explicit operator bool() const;
 
   int           kind() const;
-  Symbol const* symbol() const;
   String const& spelling() const;
   Location      location() const;
+
+  Symbol const*         symbol() const;
+  Identifier_sym const* identifier_symbol() const;
+  Boolean_sym const*    boolean_symbol() const;
+  Integer_sym const*    integer_symbol() const;
+  Character_sym const*  character_symbol() const;
+  String_sym const*     string_symbol() const;
 
 private:
   Location      loc_;
@@ -131,18 +147,10 @@ Token::operator bool() const
 
 
 // Returns the token kind.
-inline int 
+inline int
 Token::kind() const
 {
   return kind_;
-}
-
-
-// Returns the token's symbol and attributes.
-inline Symbol const* 
-Token::symbol() const
-{
-  return sym_;
 }
 
 
@@ -159,6 +167,54 @@ inline Location
 Token::location() const
 {
   return loc_;
+}
+
+
+// Returns the token's symbol and attributes.
+inline Symbol const*
+Token::symbol() const
+{
+  return sym_;
+}
+
+
+// Return the identifier symbol for the token.
+inline Identifier_sym const*
+Token::identifier_symbol() const
+{
+  return cast<Identifier_sym>(sym_);
+}
+
+
+// Return the boolean symbol for the token.
+inline Boolean_sym const*
+Token::boolean_symbol() const
+{
+  return cast<Boolean_sym>(sym_);
+}
+
+
+// Returns the integer symbol for the token.
+inline Integer_sym const*
+Token::integer_symbol() const
+{
+  return cast<Integer_sym>(sym_);
+}
+
+
+// Return the character symbol for the token.
+inline Character_sym const*
+Token::character_symbol() const
+{
+  return cast<Character_sym>(sym_);
+}
+
+
+// Return the string symbol for the token.
+inline String_sym const*
+Token::string_symbol() const
+{
+  return cast<String_sym>(sym_);
 }
 
 
@@ -202,7 +258,7 @@ public:
   Token get();
   void put(Token);
 
-  Position position() const; 
+  Position position() const;
   Location location() const;
 
 private:
@@ -277,6 +333,12 @@ Token_stream::location() const
 {
   return peek().location();
 }
+
+
+// -------------------------------------------------------------------------- //
+// Symbol initialization
+
+void init_symbols(Symbol_table&);
 
 
 #endif
