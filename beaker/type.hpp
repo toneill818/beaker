@@ -123,6 +123,7 @@ struct Array_type : Type
 
   Type const* type() const   { return first; }
   Expr*       extent() const { return second; }
+  int         size() const;
 
   Type const* first;
   Expr*       second;
@@ -205,7 +206,7 @@ Type const* get_record_type(Record_decl*);
 
 // The scalar types are bool, char, and int.
 inline bool
-is_scalar_type(Type const* t)
+is_scalar(Type const* t)
 {
   return is<Boolean_type>(t)
       || is<Character_type>(t)
@@ -219,7 +220,7 @@ is_scalar_type(Type const* t)
 // TODO: I don't believe that block types are aggregate.
 // I think they are scalar (pointers).
 inline bool
-is_aggregate_type(Type const* t)
+is_aggregate(Type const* t)
 {
   return is<Record_type>(t)
       || is<Array_type>(t);
@@ -229,7 +230,7 @@ is_aggregate_type(Type const* t)
 // Returns true if this is the type of a string
 // literal: char[N].
 inline bool
-is_string_type(Type const* t)
+is_string(Type const* t)
 {
   if (Array_type const* a = as<Array_type>(t))
     return a->type() == get_character_type();

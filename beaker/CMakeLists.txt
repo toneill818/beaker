@@ -16,6 +16,7 @@ add_library(beaker STATIC
   expr.cpp
   type.cpp
   decl.cpp
+  specifier.cpp
   value.cpp
   print.cpp
   less.cpp
@@ -39,8 +40,8 @@ set(libs
   ${Boost_SYSTEM_LIBRARIES}
   ${Boost_FILESYSTEM_LIBRARIES}
   ${LLVM_LIBRARIES}
-  lingo
-  beaker)
+  beaker
+  lingo)
 
 
 # Create the beaker compiler.

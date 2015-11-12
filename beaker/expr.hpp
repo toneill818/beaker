@@ -404,9 +404,9 @@ struct Index_expr : Expr
 
 // Represents the conversion of a source expression to
 // a target type.
-struct Conversion : Expr
+struct Conv : Expr
 {
-  Conversion(Type const* t, Expr* e)
+  Conv(Type const* t, Expr* e)
     : Expr(t), first(e)
   { }
 
@@ -418,9 +418,9 @@ struct Conversion : Expr
 
 
 // Represents the conversion of a reference to a value.
-struct Value_conv : Conversion
+struct Value_conv : Conv
 {
-  using Conversion::Conversion;
+  using Conv::Conv;
 
   void accept(Visitor& v) const { v.visit(this); }
   void accept(Mutator& v)       { v.visit(this); }
@@ -428,9 +428,9 @@ struct Value_conv : Conversion
 
 
 // Represents the conversion of an array to a block.
-struct Block_conv : Conversion
+struct Block_conv : Conv
 {
-  using Conversion::Conversion;
+  using Conv::Conv;
 
   void accept(Visitor& v) const { v.visit(this); }
   void accept(Mutator& v)       { v.visit(this); }
@@ -449,14 +449,19 @@ struct Block_conv : Conversion
 // allocated object. The declaration is set during
 // elaboration.
 //
-// FIXME: Should this be a declaraiton or an expression
-// that refers to the created object? Probably the
-// latter so that we can handle dynamic allocation in
-// a uniform way. Think about C++'s `new T() or
-// `new (p) T()`.
-struct Initializer : Expr
+// FIXME: An initializer is a syntactic placeholder for
+// a constructor that is evaluated on uninitialized memory. 
+// This means that during elaboration. For example,
+// default initalization for an POD aggregate should
+// select a memset intrinsic. 
+//
+// TODO: Initializers should probably be bound to
+// a reference to the object created, not the
+// declaration. Otherwise, we can't do new very
+// well.
+struct Init : Expr
 {
-  Initializer(Type const* t)
+  Init(Type const* t)
     : Expr(t)
   { }
 
@@ -468,9 +473,16 @@ struct Initializer : Expr
 
 // Performs default initialization of an object
 // of the given type.
-struct Default_init : Initializer
+//
+// FIXME: Find a constructor of the type:
+//
+//    (ref T) -> void
+//
+// Note that we should also explicitly represent
+// trivial default constructors.
+struct Default_init : Init
 {
-  using Initializer::Initializer;
+  using Init::Init;
 
   void accept(Visitor& v) const { v.visit(this); }
   void accept(Mutator& v)       { v.visit(this); }
@@ -479,10 +491,14 @@ struct Default_init : Initializer
 
 // Performs copy initialization of an object
 // of the given type.
-struct Copy_init : Initializer
+//
+// FIXME: Find a constructor of the type:
+//
+//    (ref const T) -> void
+struct Copy_init : Init
 {
   Copy_init(Type const* t, Expr* e)
-    : Initializer(t), first(e)
+    : Init(t), first(e)
   { }
 
   Expr* value() const { return first; }
@@ -492,6 +508,7 @@ struct Copy_init : Initializer
 
   Expr* first;
 };
+
 
 // -------------------------------------------------------------------------- //
 // Generic visitor
@@ -586,7 +603,6 @@ apply(Expr* e, F fn)
   Generic_expr_mutator<F, T> v(fn);
   return lingo::accept(e, v);
 }
-
 
 
 #endif

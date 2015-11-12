@@ -17,6 +17,28 @@
 
 
 // -------------------------------------------------------------------------- //
+// Mapping of names
+
+// Synthesize a name using the linkage model for
+// the declaration's language. Currently, there
+// are two linkage models:
+//
+//    - C
+//    - Beaker
+//
+// NOTE: Currently, these are the same. However, these
+// differ be as Beaker evolves.
+String
+Generator::get_name(Decl const* d)
+{
+  if (d->is_foreign())
+    return d->name()->spelling();
+  else
+    return d->name()->spelling();
+}
+
+
+// -------------------------------------------------------------------------- //
 // Mapping of types
 //
 // The type generator transforms a beaker type into
@@ -198,9 +220,9 @@ Generator::gen(Literal_expr const* e)
 
   // A string literal produces a new global string constant.
   // and returns a pointer to an array of N characters.
-  if (is_string_type(t)) {
+  if (is_string(t)) {
     Array_value a = v.get_array();
-    String s = a.to_string();
+    String s = a.get_string();
     llvm::Constant* c = llvm::ConstantDataArray::getString(cxt, s);
 
     llvm::GlobalVariable* v = new llvm::GlobalVariable(
@@ -374,12 +396,20 @@ Generator::gen(Not_expr const* e)
 llvm::Value*
 Generator::gen(Call_expr const* e)
 {
-  llvm::Value* callee = gen(e->target());
+//<<<<<<< HEAD
+//  llvm::Value* callee = gen(e->target());
+//  std::vector<llvm::Value*> args;
+//  for(auto i : e->second){
+//    args.push_back(gen(i));
+//  }
+//  return build.CreateCall(callee,args);
+//=======
+  llvm::Value* fn = gen(e->target());
   std::vector<llvm::Value*> args;
-  for(auto i : e->second){
-    args.push_back(gen(i));
-  }
-  return build.CreateCall(callee,args);
+  for (Expr const* a : e->arguments())
+    args.push_back(gen(a));
+  return build.CreateCall(fn, args);
+
 }
 
 
@@ -445,14 +475,14 @@ Generator::gen(Default_init const* e)
 
   // Scalar types should get a 0 value in the
   // appropriate type.
-  if (is_scalar_type(t))
+  if (is_scalar(t))
     return llvm::ConstantInt::get(type, 0);
 
   // Aggregate types are zero initialized.
   //
   // NOTE: This isn't actually correct. Aggregate types
   // should be memberwise default initialized.
-  if (is_aggregate_type(t))
+  if (is_aggregate(t))
     return llvm::ConstantAggregateZero::get(type);
 
   throw std::runtime_error("unhahndled default initializer");
@@ -658,29 +688,46 @@ Generator::gen(Decl const* d)
 void
 Generator::gen_local(Variable_decl const* d)
 {
-  throw std::runtime_error("not implemented");
+  // Create the alloca instruction at the beginning of
+  // the function. Not at the point where we get it.
+  llvm::BasicBlock& b = fn->getEntryBlock();
+  llvm::IRBuilder<> tmp(&b, b.begin());
+  llvm::Value* ptr = tmp.CreateAlloca(get_type(d->type()));
+
+  // Save the decl binding.
+  stack.top().bind(d, ptr);
+
+  // Initialize the object.
+  llvm::Value* init = gen(d->init());
+  build.CreateStore(init, ptr);
 }
 
 
 void
 Generator::gen_global(Variable_decl const* d)
 {
-  String const&   name = d->name()->spelling();
-  llvm::Type*     type = get_type(d->type());
+  String      name = get_name(d);
+  llvm::Type* type = get_type(d->type());
 
-  // FIXME: Handle initialization correctly. If the
-  // initializer is a literal (or a constant expression),
-  // then we should evaluate that and assign it here.
-  llvm::Value* val = gen(d->init());
-  llvm::Constant* init;
-  if (llvm::Constant* c = llvm::dyn_cast<llvm::Constant>(val))
-    init = c;
-  else
-    init = llvm::ConstantInt::get(type, 0);
+  // Try to generate a constant initializer.
+  llvm::Constant* init = nullptr;
+  if (!d->is_foreign()) {
+
+    // FIXME: If the initializer can be reduced to a value,
+    // then generate that constant. If not, we need dynamic
+    // initialization of global variables.
+
+    init = llvm::Constant::getNullValue(type);
+
+    // llvm::Value* val = gen(d->init());
+    // if (llvm::Constant* c = llvm::dyn_cast<llvm::Constant>(val)) {
+    //   init = c;
+    // } 
+  }
+
 
   // Note that the aggregate 0 only applies to aggregate
   // types. We can't apply it to initializers for scalars.
-  // llvm::Constant* init = llvm::ConstantAggregateZero::get(type);
 
   // Build the global variable, automatically adding
   // it to the module.
@@ -717,12 +764,12 @@ Generator::gen(Variable_decl const* d)
 void
 Generator::gen(Function_decl const* d)
 {
-  String const& name = d->name()->spelling();
-  llvm::Type*   type = get_type(d->type());
+  String name = get_name(d);
+  llvm::Type* type = get_type(d->type());
 
   // Build the function.
   llvm::FunctionType* ftype = llvm::cast<llvm::FunctionType>(type);
-  llvm::Function* fn = llvm::Function::Create(
+  fn = llvm::Function::Create(
     ftype,                           // function type
     llvm::Function::ExternalLinkage, // linkage
     name,                            // name
@@ -730,6 +777,11 @@ Generator::gen(Function_decl const* d)
 
   // Create a new binding for the variable.
   stack.top().bind(d, fn);
+
+  // If the declaration is not defined, then don't
+  // do any of this stuff...
+  if (!d->body())
+    return;
 
   // Establish a new binding environment for declarations
   // related to this function.
@@ -756,11 +808,12 @@ Generator::gen(Function_decl const* d)
 
   // Build the entry point for the function
   // and make that the insertion point.
-  //
-  // TODO: We probably need a stack of blocks
-  // so that we know where we are.
-  llvm::BasicBlock* b = llvm::BasicBlock::Create(cxt, "b", fn);
+  llvm::BasicBlock* b = llvm::BasicBlock::Create(cxt, "entry", fn);
   build.SetInsertPoint(b);
+
+  // TODO: Create a local variable for the return value.
+  // Return statements will write here.
+  ret = build.CreateAlloca(fn->getReturnType());
 
   // Generate a local variable for each of the variables.
   for (Decl const* p : d->parameters())
@@ -770,9 +823,20 @@ Generator::gen(Function_decl const* d)
   retBB = llvm::BasicBlock::Create(cxt,"ret",fn);
   // Generate the body of the function.
   gen(d->body());
+
   auto retV = build.CreateLoad(ret);
   build.SetInsertPoint(retBB);
   build.CreateRet(retV);
+
+
+  // TODO: Create an exit block and allow code to
+  // jump directly to that block after storing
+  // the return value.
+
+  // Reset stateful info.
+  ret = nullptr;
+  fn = nullptr;
+
 }
 
 
