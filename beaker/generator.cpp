@@ -551,17 +551,46 @@ Generator::gen(Return_stmt const* s)
 void
 Generator::gen(If_then_stmt const* s)
 {
-//  auto CondV = gen(s->condition());
+  auto CondV = gen(s->condition());
+  // If (e)  s
+  // e is first
+  // s is second
 
-  throw std::runtime_error("not implemented");
+  //CondV = build.CreateICmpONE(CondV, llvm::ConstantFP::get(llvm::getGlobalContext(), llvm::APFloat(0.0)), "ifcond");
+
+  auto TheFunction = build.GetInsertBlock()->getParent(); // Get current function
+  auto thenBB = llvm::BasicBlock::Create(llvm::getGlobalContext(),"then",TheFunction);
+  auto ifContinue = llvm::BasicBlock::Create(llvm::getGlobalContext(), "ifcon");
+  build.CreateCondBr(CondV,thenBB,ifContinue);
+  build.SetInsertPoint(thenBB);
+  gen(s->second);
+  build.CreateBr(ifContinue);
+  TheFunction->getBasicBlockList().push_back(ifContinue);
+  build.SetInsertPoint(ifContinue);
 }
 
 
 void
 Generator::gen(If_else_stmt const* s)
 {
-//  auto CondV = gen(s->condition());
-  throw std::runtime_error("not implemented");
+  auto CondV = gen(s->condition());
+  auto TheFunction = build.GetInsertBlock()->getParent();
+  auto thenBB = llvm::BasicBlock::Create(llvm::getGlobalContext(),"then",TheFunction);
+  auto elseBB = llvm::BasicBlock::Create(llvm::getGlobalContext(),"else");
+  auto ifContinue = llvm::BasicBlock::Create(llvm::getGlobalContext(),"ifcon");
+  build.CreateCondBr(CondV,thenBB,elseBB);
+  build.SetInsertPoint(thenBB);
+  gen(s->second);
+  build.CreateBr(ifContinue);
+  thenBB = build.GetInsertBlock();
+  TheFunction->getBasicBlockList().push_back(elseBB);
+  build.SetInsertPoint(elseBB);
+  gen(s->third);
+  build.CreateBr(ifContinue);
+  elseBB = build.GetInsertBlock();
+  TheFunction->getBasicBlockList().push_back(ifContinue);
+  build.SetInsertPoint(ifContinue);
+
 }
 
 
