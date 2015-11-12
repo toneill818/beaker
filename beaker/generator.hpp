@@ -105,6 +105,7 @@ struct Generator
   llvm::Module*     mod;
 
   llvm::Value*      ret;
+    llvm::BasicBlock* retBB;
 
 
   Symbol_stack      stack;

@@ -248,7 +248,6 @@ Generator::gen(Sub_expr const* e)
   llvm::Value* l = gen(e->left());
   llvm::Value* r = gen(e->right());
   return build.CreateSub(l, r);
-  //throw std::runtime_error("not implemented");
 }
 
 
@@ -276,7 +275,6 @@ Generator::gen(Rem_expr const* e)
   llvm::Value* l = gen(e->left());
   llvm::Value* r = gen(e->right());
   return build.CreateURem(l, r);
-  throw std::runtime_error("not implemented");
 }
 
 
@@ -284,7 +282,6 @@ llvm::Value*
 Generator::gen(Neg_expr const* e)
 {
   return build.CreateNeg(gen(e->first));
-  //throw std::runtime_error("not implemented");
 }
 
 
@@ -292,7 +289,6 @@ llvm::Value*
 Generator::gen(Pos_expr const* e)
 {
   return gen(e->first);
-  //throw std::runtime_error("not implemented");
 }
 
 
@@ -302,7 +298,6 @@ Generator::gen(Eq_expr const* e)
   llvm::Value* l = gen(e->left());
   llvm::Value* r = gen(e->right());
   return build.CreateICmpEQ(l, r);
-  //throw std::runtime_error("not implemented");
 }
 
 
@@ -321,7 +316,6 @@ Generator::gen(Lt_expr const* e)
   llvm::Value* l = gen(e->left());
   llvm::Value* r = gen(e->right());
   return build.CreateICmpSLT(l, r);
- // throw std::runtime_error("not implemented");
 }
 
 
@@ -340,7 +334,6 @@ Generator::gen(Le_expr const* e)
   llvm::Value* l = gen(e->left());
   llvm::Value* r = gen(e->right());
   return build.CreateICmpSLE(l, r);
-  //throw std::runtime_error("not implemented");
 }
 
 
@@ -350,7 +343,6 @@ Generator::gen(Ge_expr const* e)
   llvm::Value* l = gen(e->left());
   llvm::Value* r = gen(e->right());
   return build.CreateICmpSGE(l, r);
-  //throw std::runtime_error("not implemented");
 }
 
 
@@ -388,7 +380,6 @@ Generator::gen(Call_expr const* e)
     args.push_back(gen(i));
   }
   return build.CreateCall(callee,args);
- // throw std::runtime_error("not implemented");
 }
 
 
@@ -507,7 +498,7 @@ Generator::gen(Stmt const* s)
 void
 Generator::gen(Empty_stmt const* s)
 {
- return;// throw std::runtime_error("not implemented");
+ return;
 }
 
 
@@ -544,6 +535,7 @@ Generator::gen(Return_stmt const* s)
 {
   llvm::Value* v = gen(s->value());
   build.CreateStore(v, ret);
+  build.CreateBr(retBB);
  // build.CreateRet(ret);
 }
 
@@ -775,10 +767,11 @@ Generator::gen(Function_decl const* d)
     gen(p);
 
   ret = build.CreateAlloca(get_type(d->return_type()));
-
+  retBB = llvm::BasicBlock::Create(cxt,"ret",fn);
   // Generate the body of the function.
   gen(d->body());
   auto retV = build.CreateLoad(ret);
+  build.SetInsertPoint(retBB);
   build.CreateRet(retV);
 }
 
