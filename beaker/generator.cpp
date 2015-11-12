@@ -507,7 +507,7 @@ Generator::gen(Stmt const* s)
 void
 Generator::gen(Empty_stmt const* s)
 {
-  throw std::runtime_error("not implemented");
+ return;// throw std::runtime_error("not implemented");
 }
 
 
