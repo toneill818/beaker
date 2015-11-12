@@ -346,7 +346,7 @@ Generator::gen(Gt_expr const* e)
 {
   llvm::Value* l = gen(e->left());
   llvm::Value* r = gen(e->right());
-  return build.CreateICmpSGE(l, r);
+  return build.CreateICmpSGT(l, r);
 }
 
 
