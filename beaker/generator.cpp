@@ -543,7 +543,8 @@ void
 Generator::gen(Return_stmt const* s)
 {
   llvm::Value* v = gen(s->value());
-  build.CreateRet(v);
+  build.CreateStore(v, ret);
+ // build.CreateRet(ret);
 }
 
 
@@ -740,9 +741,11 @@ Generator::gen(Function_decl const* d)
   // Generate a local variable for each of the variables.
   for (Decl const* p : d->parameters())
     gen(p);
-
+  ret = build.CreateAlloca(get_type(d->return_type()));
   // Generate the body of the function.
   gen(d->body());
+  auto retV = build.CreateLoad(ret);
+  build.CreateRet(retV);
 }
 
 
