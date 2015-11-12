@@ -566,7 +566,6 @@ Generator::gen(Return_stmt const* s)
   llvm::Value* v = gen(s->value());
   build.CreateStore(v, ret);
   build.CreateBr(retBB);
- // build.CreateRet(ret);
 }
 
 
@@ -619,7 +618,22 @@ Generator::gen(If_else_stmt const* s)
 void
 Generator::gen(While_stmt const* s)
 {
-  throw std::runtime_error("not implemented");
+  //auto CondV = gen(s->condition());
+  auto TheFunction = build.GetInsertBlock()->getParent();
+  auto loopCond = llvm::BasicBlock::Create(llvm::getGlobalContext(),"loop_cond",TheFunction);
+  auto loopBody = llvm::BasicBlock::Create(llvm::getGlobalContext(),"loopBody");
+  auto loopFinish = llvm::BasicBlock::Create(llvm::getGlobalContext(),"loop_finsih");
+  build.CreateBr(loopCond);// Jump to the condition
+  build.SetInsertPoint(loopCond);
+  auto CondV = gen(s->condition());
+  build.CreateCondBr(CondV,loopBody,loopFinish);
+  TheFunction->getBasicBlockList().push_back(loopBody);
+  build.SetInsertPoint(loopBody);
+  gen(s->body());
+  build.CreateBr(loopCond); // Go back and test the condition
+  TheFunction->getBasicBlockList().push_back(loopFinish);
+  build.SetInsertPoint(loopFinish);
+  //throw std::runtime_error("not implemented");
 }
 
 
@@ -824,8 +838,9 @@ Generator::gen(Function_decl const* d)
   // Generate the body of the function.
   gen(d->body());
 
-  auto retV = build.CreateLoad(ret);
+
   build.SetInsertPoint(retBB);
+  auto retV = build.CreateLoad(ret);
   build.CreateRet(retV);
 
 
