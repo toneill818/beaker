@@ -551,6 +551,8 @@ Generator::gen(Return_stmt const* s)
 void
 Generator::gen(If_then_stmt const* s)
 {
+//  auto CondV = gen(s->condition());
+
   throw std::runtime_error("not implemented");
 }
 
@@ -558,6 +560,7 @@ Generator::gen(If_then_stmt const* s)
 void
 Generator::gen(If_else_stmt const* s)
 {
+//  auto CondV = gen(s->condition());
   throw std::runtime_error("not implemented");
 }
 
@@ -741,7 +744,9 @@ Generator::gen(Function_decl const* d)
   // Generate a local variable for each of the variables.
   for (Decl const* p : d->parameters())
     gen(p);
+
   ret = build.CreateAlloca(get_type(d->return_type()));
+
   // Generate the body of the function.
   gen(d->body());
   auto retV = build.CreateLoad(ret);
