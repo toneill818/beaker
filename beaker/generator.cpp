@@ -589,8 +589,8 @@ Generator::gen(If_then_stmt const* s)
   build.SetInsertPoint(thenBB);
   gen(s->second);
 
-  if(hasBr.find(build.GetInsertBlock())->second ){
-    auto x = hasBr.find(build.GetInsertBlock())->second;
+  if(!hasBr.find(build.GetInsertBlock())->second ){
+    //auto x = hasBr.find(build.GetInsertBlock())->second;
     build.CreateBr(ifContinue);
   }
 
@@ -639,17 +639,28 @@ Generator::gen(While_stmt const* s)
   auto loopFinish = llvm::BasicBlock::Create(llvm::getGlobalContext(),"loop_finsih");
   whileEntry.push(loopCond);
   whileExit.push(loopFinish);
+  hasBr.insert(std::pair<llvm::BasicBlock*,bool>(loopCond,false));
+  hasBr.insert(std::pair<llvm::BasicBlock*,bool>(loopBody,false));
+  hasBr.insert(std::pair<llvm::BasicBlock*,bool>(loopFinish,false));
 
-    build.CreateBr(loopCond);// Jump to the condition
+  build.CreateBr(loopCond);// Jump to the condition
+
 
   build.SetInsertPoint(loopCond);
   auto CondV = gen(s->condition());
-    build.CreateCondBr(CondV,loopBody,loopFinish);
+  if(!hasBr.find(build.GetInsertBlock())->second) {
+    build.CreateCondBr(CondV, loopBody, loopFinish);
+    hasBr.find(build.GetInsertBlock())->second = true;
+  }
 
   TheFunction->getBasicBlockList().push_back(loopBody);
   build.SetInsertPoint(loopBody);
   gen(s->body());
+  if(!hasBr.find(build.GetInsertBlock())->second) {
     build.CreateBr(loopCond); // Go back and test the condition
+    hasBr.find(build.GetInsertBlock())->second = true;
+  }
+
   TheFunction->getBasicBlockList().push_back(loopFinish);
   build.SetInsertPoint(loopFinish);
   whileEntry.pop();
@@ -669,7 +680,7 @@ Generator::gen(Break_stmt const* s)
 void
 Generator::gen(Continue_stmt const* s)
 {
-
+  hasBr.find(build.GetInsertBlock())->second = true;
   build.CreateBr(whileEntry.top());
 }
 
