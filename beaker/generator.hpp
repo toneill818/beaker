@@ -11,6 +11,7 @@
 
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/IRBuilder.h>
+#include <stack>
 
 
 // Used to maintain a mapping of Beaker declarations
@@ -102,6 +103,7 @@ struct Generator
   void gen_local(Variable_decl const*);
   void gen_global(Variable_decl const*);
 
+
   llvm::LLVMContext cxt;
   llvm::IRBuilder<> build;
   llvm::Module*     mod;
@@ -110,7 +112,9 @@ struct Generator
 
 //  llvm::Value*      ret;
     llvm::BasicBlock* retBB;
-
+    std::stack<llvm::BasicBlock*> whileEntry;
+    std::stack<llvm::BasicBlock*> whileExit;
+    std::unordered_map<llvm::BasicBlock*, bool> hasBr;
 
   Symbol_stack      stack;
   Type_env          types;
