@@ -102,7 +102,7 @@ struct Generator
 
   void gen_local(Variable_decl const*);
   void gen_global(Variable_decl const*);
-
+  void createBranch(llvm::BasicBlock const*, llvm::BranchInst *);
 
   llvm::LLVMContext cxt;
   llvm::IRBuilder<> build;

@@ -566,8 +566,19 @@ Generator::gen(Return_stmt const* s)
 {
   llvm::Value* v = gen(s->value());
   build.CreateStore(v, ret);
-  build.CreateBr(retBB);
+
+  //build.CreateBr(retBB);
+  auto x = hasBr.find(build.GetInsertBlock());
+  if(x != hasBr.end() ){
+    if(!x->second){
+      build.CreateBr(retBB);
+      x->second = true;
+    }
+  }else{
+    build.CreateBr(retBB);
+  }
 }
+
 
 
 void
@@ -588,8 +599,8 @@ Generator::gen(If_then_stmt const* s)
 
   build.SetInsertPoint(thenBB);
   gen(s->second);
-
-  if(!hasBr.find(build.GetInsertBlock())->second ){
+  createBranch(build.GetInsertBlock(),llvm::BranchInst::Create(ifContinue));
+ if(!hasBr.find(build.GetInsertBlock())->second ){
     //auto x = hasBr.find(build.GetInsertBlock())->second;
     build.CreateBr(ifContinue);
   }
@@ -607,20 +618,29 @@ Generator::gen(If_else_stmt const* s)
   auto thenBB = llvm::BasicBlock::Create(llvm::getGlobalContext(),"then",TheFunction);
   auto elseBB = llvm::BasicBlock::Create(llvm::getGlobalContext(),"else");
   auto ifContinue = llvm::BasicBlock::Create(llvm::getGlobalContext(),"ifcon");
+  hasBr.insert(std::pair<llvm::BasicBlock*,bool>(thenBB,false));
+  hasBr.insert(std::pair<llvm::BasicBlock*,bool>(elseBB,false));
+  hasBr.insert(std::pair<llvm::BasicBlock*,bool>(ifContinue,false));
 
   build.CreateCondBr(CondV,thenBB,elseBB);
   build.SetInsertPoint(thenBB);
   gen(s->second);
-
-
+  //createBranch(build.GetInsertBlock(),llvm::BranchInst::Create(ifContinue));
+  if(!hasBr.find(build.GetInsertBlock())->second){
     build.CreateBr(ifContinue);
+    hasBr.find(build.GetInsertBlock())->second = true;
+  }
+
 
   thenBB = build.GetInsertBlock();
   TheFunction->getBasicBlockList().push_back(elseBB);
   build.SetInsertPoint(elseBB);
   gen(s->third);
-
+  if(!hasBr.find(build.GetInsertBlock())->second) {
     build.CreateBr(ifContinue);
+    hasBr.find(build.GetInsertBlock())->second = true;
+  }
+
 
   elseBB = build.GetInsertBlock();
   TheFunction->getBasicBlockList().push_back(ifContinue);
@@ -877,6 +897,14 @@ Generator::gen(Function_decl const* d)
   auto retV = build.CreateLoad(ret);
   build.CreateRet(retV);
 
+  auto iter = fn->getBasicBlockList().begin();
+  while(iter != fn->getBasicBlockList().end()){
+    if(iter->empty()){
+      build.SetInsertPoint(iter);
+      build.CreateUnreachable();
+    }
+    iter++;
+  }
 
   // TODO: Create an exit block and allow code to
   // jump directly to that block after storing
@@ -885,6 +913,7 @@ Generator::gen(Function_decl const* d)
   // Reset stateful info.
   ret = nullptr;
   fn = nullptr;
+
 
 }
 
@@ -958,4 +987,11 @@ Generator::operator()(Decl const* d)
   assert(is<Module_decl>(d));
   gen(d);
   return mod;
+}
+
+void
+Generator::createBranch(llvm::BasicBlock const* bb, llvm::BranchInst * i){
+  if(bb->getTerminator() != nullptr){
+    build.Insert(i);
+  }
 }
